@@ -1,0 +1,11 @@
+# Ignore all data and output files
+*.json
+*.jsonl
+*.csv
+*.gz
+
+# Ignore Python caches and virtual environments
+__pycache__/
+.venv/
+venv/
+.env
