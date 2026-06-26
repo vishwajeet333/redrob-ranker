@@ -29,8 +29,6 @@ by understanding career trajectories, not counting keywords.*
 
 ## The core insight
 
-Every ATS ranks candidates by keyword frequency. Ours doesn't.
-
 A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but spent their entire career at TCS ranks **lower** than someone who shipped a recommendation system at Swiggy and never wrote those words. That distinction between claimed skills and evidenced work is what separates this system from a glorified `grep`.
 
 ---
