@@ -18,7 +18,7 @@
 
 **Redrob AI Hackathon · Intelligent Candidate Discovery & Ranking**
 
-*Ranks 100,000 candidates the way a world-class recruiter would
+*Ranks 100,000 candidates the way a world-class recruiter would —
 by understanding career trajectories, not counting keywords.*
 
 [**🚀 Live Demo**](https://huggingface.co/spaces/holyn/redrob-ranker) · [**📄 Quick Start**](#quick-start) · [**🏗 Architecture**](#architecture)
@@ -29,9 +29,9 @@ by understanding career trajectories, not counting keywords.*
 
 ## The core insight
 
-Every ATS ranks candidates by keyword frequency. This system doesn't.
+Every ATS ranks candidates by keyword frequency. Ours doesn't.
 
-A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but spent their entire career at TCS ranks **lower** than someone who shipped a recommendation system at Swiggy and never wrote those words. That distinction between claimed skills and evidenced work is what separates this system from a glorified `grep`.
+A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but spent their entire career at TCS ranks **lower** than someone who shipped a recommendation system at Swiggy and never wrote those words. That distinction — between claimed skills and evidenced work — is what separates this system from a glorified `grep`.
 
 ---
 
@@ -68,15 +68,17 @@ A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but s
 │  bm25          · 0.05  ──  lexical signal    │
 │                                              │
 │  ┌─ hard gates ──────────────────────────┐   │
-│  │ consulting-only career   ->  × 0.35   │   │
-│  │ wrong domain             ->  × 0.15   │   │
-│  │ honeypot signals         ->  ≈ 0.00   │   │
+│  │ consulting-only career   →  × 0.35   │   │
+│  │ wrong domain             →  × 0.15   │   │
+│  │ honeypot signals         →  ≈ 0.00   │   │
 │  └───────────────────────────────────────┘   │
 └──────────────┬───────────────────────────────┘
                │
                ▼
      Top 100 · submission.csv · audit_log.jsonl
 ```
+
+> **Optional:** run `precompute.py` offline to blend Gemini Flash scores as a 25% signal — zero network calls during ranking.
 
 ---
 
@@ -99,13 +101,13 @@ A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but s
 # Install
 pip install -r requirements.txt
 
-# Rank (standard · ~2-3 min · CPU only · zero network calls)
-python main.py --candidates candidates.jsonl --out submission.csv
+# Rank (standard — ~2-3 min, CPU only, no network)
+python main.py --candidates candidates.jsonl.gz --out submission.csv
 
 # Rank without semantic scoring (faster · ~30s)
 python main.py --candidates candidates.jsonl --out submission.csv --no-embeddings
 
-# Validate before submitting
+# Validation
 python validation.py submission.csv
 ```
 
@@ -115,11 +117,12 @@ python validation.py submission.csv
 
 ```
 redrob-ranker/
-├── main.py              # Entry point — the single reproduce command
+├── main.py              # Entry point
 ├── scoring.py           # All scoring logic (career, skill, behavioral)
 ├── text_processing.py   # BM25 tokenizer + candidate text builder
 ├── data_io.py           # Loads .json / .jsonl / .jsonl.gz
 ├── config.py            # JD-derived constants, keyword lists, weights
+├── precompute.py        # Offline Gemini pre-computation (run once)
 ├── app.py               # Gradio sandbox (HuggingFace Spaces)
 ├── validation.py        # Submission format validator
 └── requirements.txt
@@ -142,14 +145,13 @@ redrob-ranker/
 
 **Career Fit (35%)** : the highest weight by JD design
 
-- Company type: product companies (Swiggy, Uber, Zomato) vs. consulting-only (TCS, Wipro, etc.) — hard penalty ×0.35 for consulting-only
-- Domain match: AI/ML/search/SWE titles vs. wrong domain — hard penalty ×0.15 for non-technical backgrounds
-- Production deployment evidence: counts action verbs across role descriptions (`deployed`, `shipped`, `serving`, `A/B test`, `latency` …)
-- Title progression: ascending seniority across career gets a bonus; Staff/Principal level = +0.10
+- Consults keyword lists for company type (product vs. consulting)
+- Counts production deployment signals in role descriptions (`deployed`, `shipped`, `serving`, `A/B test`, `latency` …)
+- Scores seniority trajectory — ascending titles across roles get a bonus
 
 **Skill Fit (25%)** : quality-verified, not just listed
 
-- Every skill weighted by `proficiency × endorsements × duration_months`
+- Every skill is weighted `proficiency × endorsements × duration_months`
 - Cross-validated against career descriptions — claimed but never evidenced = trust ×0.5
 - Redrob assessment scores override claimed proficiency when available
 - Zero duration + zero endorsements = keyword stuffing signal -> trust ≈ 0.1
@@ -160,10 +162,13 @@ redrob-ranker/
 
 **Honeypot detection** : hard gate before scoring
 
-- Expert proficiency + 0 `duration_months` across multiple skills → blocked
-- Career timeline discrepancies beyond 24 months → blocked
+- Expert proficiency + 0 `duration_months` across multiple skills -> blocked
+- Career timeline discrepancies beyond 24 months -> blocked
 
 ---
 
+<div align="center">
+
+Built for the **Redrob AI Hackathon** · Intelligent Candidate Discovery & Ranking Challenge
 
 </div>
