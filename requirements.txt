@@ -1,7 +1,3 @@
-#pip install -r requirements.txt
-
 rank-bm25==0.2.2        
 numpy>=1.24,<3.0       
-# Huggingface // gradio 
 gradio>=4.0.0
-google-genai>=0.7.0

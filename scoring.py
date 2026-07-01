@@ -13,38 +13,37 @@ from config import (
 )
 
 # SKILL-TO-CAREER CROSS-VALIDATION
- 
+
 def cross_validate_skill(skill_name: str, career_history: list[dict]) -> float:
     """
     Returns a cross-validation factor (0.5-1.0) based on whether the claimed
     skill actually appears anywhere in the candidate's career descriptions/titles.
-
     """
     if not career_history:
         return 0.75
- 
+
     all_career_text = " ".join(
         (ch.get("description", "") + " " + ch.get("title", "") + " " + ch.get("company", ""))
         for ch in career_history
     ).lower()
- 
+
     skill_lower = skill_name.lower()
- 
+
     if skill_lower in all_career_text:
         return 1.0
- 
+
     tokens = [t for t in re.findall(r"[a-z][a-z0-9\-]+", skill_lower) if len(t) > 3]
     if tokens and any(t in all_career_text for t in tokens):
         return 0.85
- 
+
     return 0.5  # skill claimed but never evidenced in actual work
- 
+
 # TITLE PROGRESSION SCORING
- 
+
 def get_title_progression_score(career_history: list[dict]) -> tuple[float, dict]:
     """
     Score the candidate's seniority trajectory over time.
- 
+
     SWE -> Senior SWE -> Staff Engineer -> Principal in 6 years = high score.
     Same title for 8 years = medium score.
     Already at Staff/Principal level = bonus.
@@ -58,7 +57,7 @@ def get_title_progression_score(career_history: list[dict]) -> tuple[float, dict
         ("director", 6), ("manager", 5),
         ("vp", 7), ("cto", 8), ("ceo", 8), ("co-founder", 7),
     ]
- 
+
     def title_to_level(title: str) -> int:
         t = title.lower()
         level = 2  # default mid-level
@@ -66,43 +65,43 @@ def get_title_progression_score(career_history: list[dict]) -> tuple[float, dict
             if keyword in t:
                 level = max(level, lvl)
         return level
- 
+
     if not career_history:
         return 0.5, {"reason": "no_history"}
- 
+
     try:
         sorted_career = sorted(career_history, key=lambda x: x.get("start_date", "2000-01-01"))
     except Exception:
         sorted_career = career_history
- 
+
     levels = [title_to_level(ch.get("title", "")) for ch in sorted_career]
     details = {"levels": levels}
- 
+
     if len(levels) == 1:
         score = round(min(1.0, 0.4 + levels[0] * 0.08), 3)
         return score, details
- 
-    max_level   = max(levels)
-    recent_max  = max(levels[-2:])
-    early_max   = max(levels[:2])
- 
+
+    max_level = max(levels)
+    recent_max = max(levels[-2:])
+    early_max = max(levels[:2])
+
     if recent_max > early_max:
         score = min(1.0, 0.60 + (recent_max - early_max) * 0.10)
     elif recent_max == early_max:
         score = 0.40 + recent_max * 0.08
     else:
         score = max(0.30, 0.50 - (early_max - recent_max) * 0.05)
- 
+
     if max_level >= 5:
         score = min(1.0, score + 0.10)
- 
+
     score = round(score, 3)
     details.update({"max_level": max_level, "recent_max": recent_max,
                     "early_max": early_max, "progression_score": score})
     return score, details
 
 # HONEYPOT DETECTION
- 
+
 def is_honeypot(c: dict) -> bool:
     """
     Detect candidates with subtly impossible profiles.
@@ -116,7 +115,7 @@ def is_honeypot(c: dict) -> bool:
     )
     if expert_zero_duration >= 3:
         return True
- 
+
     # Signal 2: Massive skill count ALL at expert/advanced with 0 endorsements each
     skills = c.get("skills", [])
     if len(skills) >= 8:
@@ -128,7 +127,7 @@ def is_honeypot(c: dict) -> bool:
         )
         if high_with_zero >= 6:
             return True
- 
+
     # Signal 3: Career timeline impossibility
     # (eg 8 years at company but duration_months is impossibly large)
     for ch in c.get("career_history", []):
@@ -147,11 +146,11 @@ def is_honeypot(c: dict) -> bool:
                     return True
         except (ValueError, TypeError):
             pass
- 
+
     return False
- 
+
 # CAREER FIT SCORING (35% of final score — highest weight, by JD design)
- 
+
 def get_career_fit_score(c: dict) -> tuple[float, dict]:
     """
     Analyze career trajectory for:
@@ -166,42 +165,42 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
     yoe = profile.get("years_of_experience", 0)
     current_title = profile.get("current_title", "").lower()
     details = {}
- 
+
     if not career:
         return 0.1, {"reason": "no_career_history"}
- 
+
     # Product vs consulting company analysis
     total_months = 0
     product_months = 0
     consulting_months = 0
     all_company_names = []
- 
+
     for ch in career:
         co = ch.get("company", "").lower()
         dur = ch.get("duration_months", 0)
         total_months += dur
         all_company_names.append(co)
- 
+
         is_consulting = any(cf in co for cf in CONSULTING_FIRM_PATTERNS)
         is_product = any(pf in co for pf in PRODUCT_COMPANY_SIGNALS)
- 
+
         if is_consulting and not is_product:
             consulting_months += dur
         elif is_product:
             product_months += dur
- 
+
     consulting_fraction = consulting_months / max(total_months, 1)
     product_fraction = product_months / max(total_months, 1)
     details["consulting_fraction"] = consulting_fraction
     details["product_fraction"] = product_fraction
- 
+
     # Checking if ENTIRELY consulting
     entirely_consulting = all(
         any(cf in co for cf in CONSULTING_FIRM_PATTERNS)
         for co in all_company_names
     )
     details["entirely_consulting"] = entirely_consulting
- 
+
     # Domain relevance: is this person actually in AI/ML/search?
     all_text = (
         " ".join(ch.get("description", "") for ch in career)
@@ -211,7 +210,7 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
     all_titles = " ".join(
         ch.get("title", "").lower() for ch in career
     ) + " " + current_title
- 
+
     # AI/ML domain signals in career descriptions
     production_signals = [
         "deployed", "production", "shipped", "launched", "serving",
@@ -222,7 +221,7 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
     ]
     production_hit_count = sum(1 for s in production_signals if s in all_text)
     details["production_signal_count"] = production_hit_count
- 
+
     # Wrong domain: career entirely in unrelated field
     wrong_domain_hit = any(kw in all_titles for kw in WRONG_DOMAIN_TITLE_KEYWORDS)
     ai_title_hit = any(kw in all_titles for kw in AI_TITLE_KEYWORDS)
@@ -234,7 +233,7 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
     details["ai_title_hit"] = ai_title_hit
     details["swe_hit"] = swe_hit
     details["wrong_domain"] = wrong_domain_hit
- 
+
     # Years of experience vs JD preferred range (5-9, ideal 6-8)
     if 5 <= yoe <= 9:
         exp_score = 1.0
@@ -247,12 +246,12 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
     else:
         exp_score = 0.5
     details["exp_score"] = exp_score
- 
+
     # Title progression scoring
     progression_score, prog_details = get_title_progression_score(career)
     details["progression_score"] = progression_score
     details["progression_details"] = prog_details
- 
+
     # Compose career score
     if wrong_domain_hit and not ai_title_hit and not swe_hit:
         domain_score = 0.05
@@ -262,7 +261,7 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
         domain_score = 0.7
     else:
         domain_score = 0.4
- 
+
     if entirely_consulting:
         company_score = 0.2
     elif product_fraction > 0.5:
@@ -273,7 +272,7 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
         company_score = 0.6
     else:
         company_score = 0.4
- 
+
     if production_hit_count >= 8:
         prod_score = 1.0
     elif production_hit_count >= 5:
@@ -282,24 +281,24 @@ def get_career_fit_score(c: dict) -> tuple[float, dict]:
         prod_score = 0.6
     else:
         prod_score = 0.3
- 
+
     # Updated weights: progression_score replaces some of domain + exp weight
     career_score = (
-        domain_score      * 0.35   # was 0.40 — progression takes some weight
-        + company_score   * 0.30   # was 0.35
-        + prod_score      * 0.15
-        + progression_score * 0.12  # NEW: seniority trajectory signal
-        + exp_score       * 0.08   # was 0.10
+        domain_score * 0.35  # was 0.40 — progression takes some weight
+        + company_score * 0.30  # was 0.35
+        + prod_score * 0.15
+        + progression_score * 0.12  # seniority trajectory signal
+        + exp_score * 0.08  # was 0.10
     )
-    details["domain_score"]   = domain_score
-    details["company_score"]  = company_score
-    details["prod_score"]     = prod_score
-    details["career_score"]   = career_score
- 
+    details["domain_score"] = domain_score
+    details["company_score"] = company_score
+    details["prod_score"] = prod_score
+    details["career_score"] = career_score
+
     return career_score, details
- 
-# SKILL FIT SCORING  (25% of final score)
- 
+
+# SKILL FIT SCORING (25% of final score)
+
 def get_skill_fit_score(c: dict) -> tuple[float, dict]:
     """
     Score skill alignment with JD, validated by:
@@ -307,35 +306,35 @@ def get_skill_fit_score(c: dict) -> tuple[float, dict]:
     - duration_months (actually used, not just listed)
     - Redrob skill assessment scores (platform-verified)
     - Proficiency level
- 
+
     Critical: skills listed but never used (duration=0) or
     unendorsed are down-weighted. This catches keyword stuffers.
     """
     skills = c.get("skills", [])
     assessment_scores = c.get("redrob_signals", {}).get("skill_assessment_scores", {})
     details = {}
- 
+
     if not skills:
         return 0.0, {"reason": "no_skills"}
- 
+
     core_score = 0.0
     bonus_score = 0.0
     max_possible_core = len(CORE_SKILL_KEYWORDS)
- 
+
     core_hits = []
     bonus_hits = []
- 
+
     career_history = c.get("career_history", [])
- 
+
     for sk in skills:
         name = sk.get("name", "").lower()
         prof = sk.get("proficiency", "beginner")
         endorsements = sk.get("endorsements", 0)
         duration = sk.get("duration_months", 0)
- 
+
         # Proficiency weight
         prof_weight = {"expert": 1.0, "advanced": 0.8, "intermediate": 0.5, "beginner": 0.2}.get(prof, 0.3)
- 
+
         # Trust multiplier: endorsed + used = real skill
         if duration == 0 and endorsements == 0:
             trust = 0.1  # keyword stuffing signal
@@ -345,7 +344,7 @@ def get_skill_fit_score(c: dict) -> tuple[float, dict]:
             trust = 0.6
         else:
             trust = min(1.0, 0.6 + endorsements / 100.0 + duration / 60.0 * 0.2)
- 
+
         # Redrob assessment score
         assessment_key = next(
             (k for k in assessment_scores if k.lower() == name), None
@@ -354,39 +353,39 @@ def get_skill_fit_score(c: dict) -> tuple[float, dict]:
             assessed = assessment_scores[assessment_key]
             assessment_factor = assessed / 100.0
             trust = (trust + assessment_factor) / 2.0
- 
+
         # Cross-validate skill against career history
         # Halves trust for skills claimed but never evidenced in actual work
         cv_factor = cross_validate_skill(sk.get("name", ""), career_history)
         trust = trust * cv_factor
- 
+
         effective_score = prof_weight * trust
- 
+
         # Match against JD requirements
         is_core = any(keyword in name for keyword in CORE_SKILL_KEYWORDS)
         is_bonus = any(keyword in name for keyword in BONUS_SKILL_KEYWORDS)
- 
+
         if is_core:
             core_score += effective_score
             core_hits.append(name)
         elif is_bonus:
             bonus_score += effective_score * 0.5
             bonus_hits.append(name)
- 
+
     # Normalize: cap at 1.0
     # A candidate with 5 strong core skills (all expert, endorsed, used) gets ~1.0
     normalized_core = min(1.0, core_score / 5.0)
     normalized_bonus = min(0.3, bonus_score / 5.0)
     skill_score = min(1.0, normalized_core * 0.8 + normalized_bonus * 0.2)
- 
+
     details["core_hits"] = core_hits[:5]
     details["bonus_hits"] = bonus_hits[:3]
     details["skill_score"] = skill_score
- 
+
     return skill_score, details
- 
-# BEHAVIORAL SIGNAL SCORING  (15% of final score)
- 
+
+# BEHAVIORAL SIGNAL SCORING (15% of final score)
+
 def get_behavioral_score(c: dict) -> tuple[float, dict]:
     """
     The JD explicitly states behavioral signals matter:
@@ -396,7 +395,7 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
     sig = c.get("redrob_signals", {})
     profile = c.get("profile", {})
     details = {}
- 
+
     # Recency: days since last active
     last_active_str = sig.get("last_active_date", "")
     try:
@@ -404,7 +403,7 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
         days_inactive = (EVAL_DATE - last_active).days
     except (ValueError, TypeError):
         days_inactive = 365
- 
+
     if days_inactive <= 14:
         recency_score = 1.0
     elif days_inactive <= 30:
@@ -419,12 +418,12 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
         recency_score = 0.05  # 6+ months inactive: "not actually available"
     details["days_inactive"] = days_inactive
     details["recency_score"] = recency_score
- 
-    # Open-to-work flag (self-declared availability) 
+
+    # Open-to-work flag (self-declared availability)
     open_to_work = sig.get("open_to_work_flag", False)
     details["open_to_work"] = open_to_work
- 
-    # Recruiter response rate 
+
+    # Recruiter response rate
     response_rate = sig.get("recruiter_response_rate", 0)
     if response_rate >= 0.7:
         response_score = 1.0
@@ -435,7 +434,7 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
     else:
         response_score = 0.1
     details["response_rate"] = response_rate
- 
+
     # Notice period (JD: "we'd love sub-30-day notice")
     notice = sig.get("notice_period_days", 90)
     if notice <= 15:
@@ -449,7 +448,7 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
     else:
         notice_score = 0.3
     details["notice_days"] = notice
- 
+
     # GitHub activity (JD mentions "open source contributions")
     github = sig.get("github_activity_score", -1)
     if github == -1:
@@ -463,16 +462,16 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
     else:
         github_score = 0.3
     details["github_score"] = github_score
- 
+
     # Location / relocation (JD: Pune/Noida, Hyderabad, Mumbai, Delhi)
     country = profile.get("country", "").lower()
     location = profile.get("location", "").lower()
     willing_relocate = sig.get("willing_to_relocate", False)
     preferred_mode = sig.get("preferred_work_mode", "flexible")
- 
+
     in_target_city = any(city in location for city in TARGET_INDIA_LOCATIONS)
     in_india = country == "india"
- 
+
     if in_target_city:
         location_score = 1.0
     elif in_india and willing_relocate:
@@ -485,18 +484,18 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
         location_score = 0.3  # Outside India = possible but JD says case-by-case
     details["location_score"] = location_score
     details["location"] = f"{location}, {country}"
- 
+
     # Profile completeness
     completeness = sig.get("profile_completeness_score", 50)
     completeness_score = completeness / 100.0
- 
+
     # Interview reliability signals
     interview_rate = sig.get("interview_completion_rate", 0.5)
     offer_rate = sig.get("offer_acceptance_rate", -1)
     reliability_score = interview_rate * 0.7
     if offer_rate >= 0:
         reliability_score = reliability_score * 0.5 + offer_rate * 0.5
- 
+
     # Compose behavioral score
     behavioral_score = (
         recency_score * 0.30
@@ -510,15 +509,14 @@ def get_behavioral_score(c: dict) -> tuple[float, dict]:
     )
     details["behavioral_score"] = behavioral_score
     return behavioral_score, details
- 
-# REASONING GENERATOR  (for CSV reasoning column)
- 
+
+# REASONING GENERATOR (for CSV reasoning column)
+
 def generate_reasoning(c: dict, career_d: dict, skill_d: dict, behav_d: dict,
-                       final_score: float, gemini_d: dict | None = None) -> str:
+                       final_score: float) -> str:
     """
     Generate 1-2 sentence specific, fact-grounded reasoning.
     Judges check: specific facts, JD connection, honest concerns, no hallucination.
-    Incorporates Gemini insight when available (more varied, less templated).
     """
     profile = c.get("profile", {})
     yoe = profile.get("years_of_experience", 0)
@@ -530,27 +528,27 @@ def generate_reasoning(c: dict, career_d: dict, skill_d: dict, behav_d: dict,
     response_rate = behav_d.get("response_rate", 0)
     notice = behav_d.get("notice_days", 90)
     open_to_work = behav_d.get("open_to_work", False)
- 
+
     strengths = []
     concerns = []
- 
+
     # Strengths
     if career_d.get("ai_title_hit"):
         strengths.append(f"{yoe:.0f}-year career in AI/ML roles")
     elif career_d.get("swe_hit"):
         strengths.append(f"{yoe:.0f} years as {title}")
- 
+
     if core_hits:
         skill_str = ", ".join(core_hits[:3])
         strengths.append(f"relevant skills including {skill_str}")
- 
+
     if career_d.get("product_fraction", 0) > 0.4:
         strengths.append("meaningful product-company exposure")
- 
+
     prod_count = career_d.get("production_signal_count", 0)
     if prod_count >= 6:
         strengths.append("strong production deployment evidence in career history")
- 
+
     # Title progression signal
     prog = career_d.get("progression_details", {})
     max_level = prog.get("max_level", 0)
@@ -559,18 +557,14 @@ def generate_reasoning(c: dict, career_d: dict, skill_d: dict, behav_d: dict,
         strengths.append("reached Staff/Principal/Head level — strong seniority signal")
     elif prog_score >= 0.75:
         strengths.append("clear upward title progression across career")
- 
-    # Gemini insight 
-    if gemini_d and gemini_d.get("reason"):
-        strengths.append(f"AI assessment: {gemini_d['reason'][:80]}")
- 
+
     if days_inactive <= 30:
         strengths.append("active on platform recently")
     if open_to_work:
         strengths.append("marked as open to work")
     if response_rate >= 0.7:
         strengths.append(f"high recruiter response rate ({response_rate:.0%})")
- 
+
     # Concerns
     if career_d.get("entirely_consulting"):
         concerns.append("career appears consulting-firm-only (JD disqualifier)")
@@ -584,14 +578,14 @@ def generate_reasoning(c: dict, career_d: dict, skill_d: dict, behav_d: dict,
         concerns.append(f"very low recruiter response rate ({response_rate:.0%})")
     if yoe < 4:
         concerns.append(f"below JD experience range ({yoe:.1f} years)")
- 
+
     # 1-2 sentence reasoning
     sentence_1 = ""
     if strengths:
         sentence_1 = f"{title} ({yoe:.0f} yrs) with {'; '.join(strengths[:3])}."
     else:
         sentence_1 = f"{title} at {company} ({yoe:.0f} yrs experience, {country})."
- 
+
     sentence_2 = ""
     if concerns:
         sentence_2 = f"Concerns: {'; '.join(concerns[:2])}."
@@ -601,5 +595,5 @@ def generate_reasoning(c: dict, career_d: dict, skill_d: dict, behav_d: dict,
         sentence_2 = "Partial fit; some JD requirements met but gaps remain."
     else:
         sentence_2 = "Below cutoff — included as filler given experience level."
- 
+
     return (sentence_1 + " " + sentence_2).strip()
