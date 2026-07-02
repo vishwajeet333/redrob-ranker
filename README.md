@@ -75,7 +75,7 @@ A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but s
 └──────────────┬───────────────────────────────┘
                │
                ▼
-     Top 100 · submission.csv · audit_log.jsonl
+     Top 100 · Catalans.csv · audit_log.jsonl
 ```
 
 ---
@@ -100,13 +100,13 @@ A candidate who lists **"FAISS, Pinecone, Elasticsearch"** in their skills but s
 pip install -r requirements.txt
 
 # Rank (standard · ~2-3 min · CPU only · zero network calls)
-python main.py --candidates candidates.jsonl --out submission.csv
+python main.py --candidates candidates.jsonl --out Catalans.csv
 
 # Rank without semantic scoring (faster · ~30s)
-python main.py --candidates candidates.jsonl --out submission.csv --no-embeddings
+python main.py --candidates candidates.jsonl --out Catalans.csv --no-embeddings
 
 # Validate before submitting
-python validation.py submission.csv
+python validation.py Catalans.csv
 ```
 
 ---
